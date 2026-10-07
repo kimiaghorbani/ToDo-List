@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>My Tasks</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      background: linear-gradient(135deg, #ff8a00, #7b2ff7);
+      min-height: 100vh;
+      margin: 0;
+      padding: 40px 16px;
+    }
+    .card {
+      background: white;
+      max-width: 640px;
+      margin: 0 auto;
+      padding: 24px;
+      border-radius: 16px;
+    }
+    h1 { color: #7b2ff7; margin-top: 0; }
+
+    /* ---------- Add form ---------- */
+    form { display: flex; gap: 8px; flex-wrap: wrap; }
+    form input[type="text"] { flex: 1; min-width: 180px; }
+    input, select {
+      padding: 10px;
+      border: 2px solid #eee;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      background: #ff8a00;
+      color: white;
+      cursor: pointer;
+    }
+    #error { color: red; }
+
+    /* ---------- Task list ---------- */
+    ul { list-style: none; padding: 0; }
+    li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+      flex-wrap: wrap;
+    }
+    li .title { flex: 1; min-width: 120px; }
+    li.done .title { text-decoration: line-through; color: #aaa; }
+    li input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; }
+    li select, li input[type="date"] { padding: 4px 6px; font-size: 13px; }
+
+    /* Priority colors */
+    .priority-high   { border-color: #e53935; color: #e53935; }
+    .priority-medium { border-color: #ff8a00; color: #ff8a00; }
+    .priority-low    { border-color: #43a047; color: #43a047; }
+
+    /* Overdue = due date passed and not completed */
+    li.overdue input[type="date"] { border-color: #e53935; background: #ffebee; }
+    .overdue-label { color: #e53935; font-size: 12px; font-weight: bold; }
+
+    .edit-btn   { background: #7b2ff7; padding: 6px 10px; }
+    .delete-btn { background: #e53935; padding: 6px 10px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>My Tasks</h1>
+
+    <form id="task-form">
+      <input type="text" id="task-title" placeholder="What do you need to do?">
+      <select id="task-priority">
+        <option value="low">Low</option>
+        <option value="medium" selected>Medium</option>
+        <option value="high">High</option>
+      </select>
+      <input type="date" id="task-due-date">
+      <button type="submit">Add</button>
+    </form>
+    <p id="error"></p>
+
+    <ul id="task-list"></ul>
+  </div>
+
+  <script>
+    const API = '/api/tasks';
+    const headers = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    };
+
+    // Today's date as "YYYY-MM-DD" (in your local time)
+    function today() {
+      const d = new Date();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${d.getFullYear()}-${month}-${day}`;
+    }
+
+    // Don't allow picking a past date in the "Add" form
+    document.getElementById('task-due-date').min = today();
+
+    // Show Laravel's error message on the page
+    async function showError(response) {
+      const data = await response.json();
+      document.getElementById('error').textContent = data.message;
+    }
+
+    // ---------- READ ----------
+    async function loadTasks() {
+      const response = await fetch(API, { headers });
+      const tasks = await response.json();
+
+      const list = document.getElementById('task-list');
+      list.innerHTML = '';
+
+      tasks.forEach(task => {
+        list.appendChild(createTaskItem(task));
+      });
+    }
+
+    // Build one row: checkbox, title, priority, due date, Edit, Delete
+    function createTaskItem(task) {
+      const li = document.createElement('li');
+      if (task.completed) li.classList.add('done');
+
+      const isOverdue = task.due_date && task.due_date < today() && !task.completed;
+      if (isOverdue) li.classList.add('overdue');
+
+      // Checkbox (toggle)
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.checked = task.completed;
+      checkbox.addEventListener('change', () => toggleTask(task.id));
+
+      // Title
+      const title = document.createElement('span');
+      title.className = 'title';
+      title.textContent = task.title;
+
+      // Priority dropdown: changing it saves right away
+      const priority = document.createElement('select');
+      priority.className = `priority-${task.priority}`;
+      ['low', 'medium', 'high'].forEach(level => {
+        const option = document.createElement('option');
+        option.value = level;
+        option.textContent = level;
+        if (level === task.priority) option.selected = true;
+        priority.appendChild(option);
+      });
+      priority.addEventListener('change', () =>
+        updateTask(task.id, { priority: priority.value })
+      );
+
+      // Due date picker: changing it saves right away
+      const dueDate = document.createElement('input');
+      dueDate.type = 'date';
+      dueDate.value = task.due_date ?? '';
+      dueDate.addEventListener('change', () =>
+        updateTask(task.id, { due_date: dueDate.value || null })
+      );
+
+      // Edit title
+      const editBtn = document.createElement('button');
+      editBtn.textContent = 'Edit';
+      editBtn.className = 'edit-btn';
+      editBtn.addEventListener('click', () => editTitle(task));
+
+      // Delete
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = 'Delete';
+      deleteBtn.className = 'delete-btn';
+      deleteBtn.addEventListener('click', () => deleteTask(task.id));
+
+      li.append(checkbox, title, priority, dueDate);
+
+      if (isOverdue) {
+        const label = document.createElement('span');
+        label.className = 'overdue-label';
+        label.textContent = 'Overdue';
+        li.append(label);
+      }
+
+      li.append(editBtn, deleteBtn);
+      return li;
+    }
+
+    // ---------- CREATE ----------
+    document.getElementById('task-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      document.getElementById('error').textContent = '';
+
+      const title = document.getElementById('task-title');
+      const priority = document.getElementById('task-priority');
+      const dueDate = document.getElementById('task-due-date');
+
+      const response = await fetch(API, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          title: title.value,
+          priority: priority.value,
+          due_date: dueDate.value || null   // empty box → no due date
+        })
+      });
+
+      if (!response.ok) return showError(response);
+
+      // Reset the form
+      title.value = '';
+      priority.value = 'medium';
+      dueDate.value = '';
+      loadTasks();
+    });
+
+    // ---------- UPDATE (any fields: priority, due_date, title) ----------
+    async function updateTask(id, changes) {
+      document.getElementById('error').textContent = '';
+
+      const response = await fetch(`${API}/${id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify(changes)
+      });
+
+      if (!response.ok) return showError(response);
+      loadTasks();
+    }
+
+    // Edit the title with a popup, then use updateTask
+    function editTitle(task) {
+      const newTitle = prompt('Edit task:', task.title);
+      if (newTitle === null || newTitle === task.title) return;
+      updateTask(task.id, { title: newTitle });
+    }
+
+    // ---------- TOGGLE ----------
+    async function toggleTask(id) {
+      await fetch(`${API}/${id}/toggle`, { method: 'PATCH', headers });
+      loadTasks();
+    }
+
+    // ---------- DELETE ----------
+    async function deleteTask(id) {
+      if (!confirm('Delete this task?')) return;
+      await fetch(`${API}/${id}`, { method: 'DELETE', headers });
+      loadTasks();
+    }
+
+    loadTasks();
+  </script>
+</body>
+</html>
