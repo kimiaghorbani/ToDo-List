@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login – Todo App</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: linear-gradient(135deg, #7b2ff7, #ff8c42);
+      min-height: 100vh; margin: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .card {
+      background: #fff; padding: 32px; border-radius: 16px; width: 320px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.2);
+    }
+    h1 { margin-top: 0; color: #7b2ff7; text-align: center; }
+    input {
+      width: 100%; padding: 10px; margin-bottom: 12px; box-sizing: border-box;
+      border: 1px solid #ddd; border-radius: 8px;
+    }
+    button {
+      width: 100%; padding: 10px; border: none; border-radius: 8px;
+      background: #ff8c42; color: #fff; font-weight: bold; cursor: pointer;
+      transition: background .2s;
+    }
+    button:hover { background: #e67a30; }
+    .switch { text-align: center; margin-top: 16px; font-size: 14px; }
+    .switch a { color: #7b2ff7; cursor: pointer; font-weight: bold; }
+    .error { color: #d33; font-size: 14px; min-height: 20px; margin: 0 0 8px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1 id="title">Login</h1>
+    <input id="name" class="hidden" placeholder="Name">
+    <input id="email" type="email" placeholder="Email">
+    <input id="password" type="password" placeholder="Password">
+    <p class="error" id="error"></p>
+    <button id="submit">Login</button>
+    <p class="switch">
+      <span id="switchText">No account?</span>
+      <a id="switchLink">Register</a>
+    </p>
+  </div>
+
+  <script>
+    let mode = 'login';
+
+    const title      = document.getElementById('title');
+    const nameInput  = document.getElementById('name');
+    const email      = document.getElementById('email');
+    const password   = document.getElementById('password');
+    const errorBox   = document.getElementById('error');
+    const submitBtn  = document.getElementById('submit');
+    const switchText = document.getElementById('switchText');
+    const switchLink = document.getElementById('switchLink');
+
+    // 1. Switch between Login and Register
+    switchLink.addEventListener('click', () => {
+      mode = mode === 'login' ? 'register' : 'login';
+      const isLogin = mode === 'login';
+
+      title.textContent      = isLogin ? 'Login' : 'Register';
+      submitBtn.textContent  = isLogin ? 'Login' : 'Register';
+      switchText.textContent = isLogin ? 'No account?' : 'Already have an account?';
+      switchLink.textContent = isLogin ? 'Register' : 'Login';
+      nameInput.classList.toggle('hidden', isLogin);
+      errorBox.textContent = '';
+    });
+
+    // 2. Send the form to the API
+    submitBtn.addEventListener('click', async () => {
+      const body = { email: email.value, password: password.value };
+      if (mode === 'register') body.name = nameInput.value;
+
+      const res = await fetch(`/api/${mode}`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        errorBox.textContent = data.message;
+        return;
+      }
+
+      // 3. Save the key card and go to the tasks page
+      localStorage.setItem('token', data.token);
+      window.location.href = '/index.html';
+    });
+  </script>
+</body>
+</html>
