@@ -88,9 +88,19 @@
 
   <script>
     const API = '/api/tasks';
+
+    // 🎫 Take the wristband out of the wallet
+    const token = localStorage.getItem('token');
+
+    // No wristband? Go to login first
+    if (!token) {
+      window.location.href = '/login.html';
+    }
+
     const headers = {
       'Content-Type': 'application/json',
-      'Accept': 'application/json'
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${token}`   // 🎫 shown with every request
     };
 
     // Today's date as "YYYY-MM-DD" (in your local time)
@@ -113,6 +123,14 @@
     // ---------- READ ----------
     async function loadTasks() {
       const response = await fetch(API, { headers });
+
+      // Wristband expired or fake? Back to login
+      if (response.status === 401) {
+        localStorage.removeItem('token');
+        window.location.href = '/login.html';
+        return;
+      }
+
       const tasks = await response.json();
 
       const list = document.getElementById('task-list');
